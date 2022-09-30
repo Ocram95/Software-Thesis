@@ -29,9 +29,13 @@ sudo ./libpcap_filter [field] [#bins] [interface] [polling interval] [output.csv
 where:
 
 -```[field]```: it specifies the field to inspect (```FL, TC, HL, NH, PL, ACK6, RES6, CHECK6, TOS, TTL, ID, FO, ACK4, RES4, CHECK4```);
+
 -```[#bins]```: it specifies the number of bins to use (a power of 2); 
+
 -```[interface]```: it specifies the interface to monitor;
+
 -```[polling interval]```: it specifies the interval to provide the results;
+
 -```[output.csv]```: it specifies the output file to store the results.
 
 
