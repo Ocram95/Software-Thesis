@@ -1,0 +1,102 @@
+diff -urN orig/src/analyzer/protocol/tcp/events.bif new/src/analyzer/protocol/tcp/events.bif
+--- orig/src/analyzer/protocol/tcp/events.bif	2021-07-28 10:35:34.584492633 +0200
++++ new/src/analyzer/protocol/tcp/events.bif	2021-07-28 10:52:16.147262301 +0200
+@@ -375,3 +375,14 @@
+ ##
+ ## .. zeek:see:: set_contents_file get_contents_file
+ event contents_file_write_failure%(c: connection, is_orig: bool, msg: string%);
++
++## Generated for each packet 
++## 
++## This is only intended to be used for comparison with other tools,
++## but it is expeced to lead to performance issues. Don't use it in
++## production environments.
++##
++## a: The ACK from the last TCP packet seen
++##
++event tcp_ack%(c: connection, ack: count%);
++
+diff -urN orig/src/IP.h new/src/IP.h
+--- orig/src/IP.h	2021-07-28 10:35:34.536492884 +0200
++++ new/src/IP.h	2021-07-28 10:47:51.704642128 +0200
+@@ -504,6 +504,12 @@
+ 		{ return ip4 ? 0 : (ntohl(ip6->ip6_flow) & 0x000fffff); }
+ 
+ 	/**
++	 * Returns value of the Traffic Class for IPv6, Type of Service for IPv4.
++	 */
++	unsigned char ToS() const
++	{ return ip4 ? ip4->ip_tos : (ntohl(ip6->ip6_flow) & 0x0ff00000) >> 20; }
++
++	/**
+ 	 * Returns number of IP headers in packet (includes IPv6 extension headers).
+ 	 */
+ 	size_t NumHeaders() const
+diff -urN orig/src/packet_analysis/protocol/ip/CMakeLists.txt new/src/packet_analysis/protocol/ip/CMakeLists.txt
+--- orig/src/packet_analysis/protocol/ip/CMakeLists.txt	2021-07-28 10:35:34.616492466 +0200
++++ new/src/packet_analysis/protocol/ip/CMakeLists.txt	2021-07-28 10:47:51.704642128 +0200
+@@ -3,6 +3,7 @@
+ 
+ include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+ 
+-zeek_plugin_begin(PacketAnalyzer IP)
++zeek_plugin_begin(Zeek IP)
+ zeek_plugin_cc(IP.cc IPBasedAnalyzer.cc SessionAdapter.cc Plugin.cc)
++zeek_plugin_bif(events.bif)
+ zeek_plugin_end()
+diff -urN orig/src/packet_analysis/protocol/ip/events.bif new/src/packet_analysis/protocol/ip/events.bif
+--- orig/src/packet_analysis/protocol/ip/events.bif	1970-01-01 01:00:00.000000000 +0100
++++ new/src/packet_analysis/protocol/ip/events.bif	2021-07-28 10:47:51.704642128 +0200
+@@ -0,0 +1,14 @@
++## Generated for IP packets.
++## 
++## WARNING!!! This is likely to overkill Zeek and it is only intended
++## to compare it with alternative implementations.
++##
++## c: The connection the packet belongs to
++##
++## fl: The Flow Label of an IPv6 packet
++##
++## tos: The TOS/DSCP packet for an IPv4/6 packet, respectively
++## 
++## ttl: The TTL/HL field for an IPv4/6 packet, respectively
++##
++event ip_packet%(fl: count, tos: count, ttl: count%);
+diff -urN orig/src/packet_analysis/protocol/ip/IP.cc new/src/packet_analysis/protocol/ip/IP.cc
+--- orig/src/packet_analysis/protocol/ip/IP.cc	2021-07-28 10:35:34.616492466 +0200
++++ new/src/packet_analysis/protocol/ip/IP.cc	2021-07-28 10:47:51.704642128 +0200
+@@ -11,6 +11,7 @@
+ #include "zeek/Event.h"
+ #include "zeek/TunnelEncapsulation.h"
+ #include "zeek/IPAddr.h"
++#include "zeek/packet_analysis/protocol/ip/events.bif.h"
+ 
+ using namespace zeek::packet_analysis::IP;
+ 
+@@ -217,6 +218,10 @@
+ 		return true;
+ 		}
+ 
++	if ( ip_packet ) {
++		event_mgr.Enqueue(ip_packet, zeek::val_mgr->Count(packet->ip_hdr->FlowLabel()), zeek::val_mgr->Count(packet->ip_hdr->ToS()), zeek::val_mgr->Count(packet->ip_hdr->TTL()));
++	}
++
+ 	// Set the data pointer to match the payload from the IP header. This makes sure that it's also pointing
+ 	// at the reassembled data for a fragmented packet.
+ 	data = packet->ip_hdr->Payload();
+diff -urN orig/src/packet_analysis/protocol/tcp/TCPSessionAdapter.cc new/src/packet_analysis/protocol/tcp/TCPSessionAdapter.cc
+--- orig/src/packet_analysis/protocol/tcp/TCPSessionAdapter.cc	2021-07-28 10:35:34.620492445 +0200
++++ new/src/packet_analysis/protocol/tcp/TCPSessionAdapter.cc	2021-07-28 10:51:08.947612874 +0200
+@@ -605,6 +605,12 @@
+ 
+ 	if ( flags.ACK() )
+ 		{
++		if ( tcp_ack ) {
++            EnqueueConnEvent(tcp_ack,
++               ConnVal(),
++               val_mgr->Count(ack_seq));
++         }
++
+ 		if ( is_orig && ! seen_first_ACK &&
+ 		     (endpoint->state == analyzer::tcp::TCP_ENDPOINT_ESTABLISHED ||
+ 		      endpoint->state == analyzer::tcp::TCP_ENDPOINT_SYN_SENT) )

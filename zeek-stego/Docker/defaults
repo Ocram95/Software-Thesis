@@ -1,0 +1,7 @@
+# Default values to run the stego.zeek script.
+# All variables must be prefixed with a "d", to avoid overlapping runtime
+# values assigned through environment variables.
+
+dMONITORED_FIELD="tc"
+dBASEBIN="8"
+dDUMP_INTERVAL="5sec"
