@@ -1,0 +1,7 @@
+TOS, hel
+TIMING, lo
+ID, worl
+TOS, d fo
+TTL, lks
+TIMING, !
+TOS, ...
